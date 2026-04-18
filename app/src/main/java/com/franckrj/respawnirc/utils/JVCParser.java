@@ -36,7 +36,7 @@ public final class JVCParser {
     private static final Pattern adInsPattern = Pattern.compile("<ins data-ad-position[^>]*></ins>");
     private static final Pattern entireMessageInPermalinkPattern = Pattern.compile("(<div class=\"messageUser js-hybrid-component\" id=\"message-[0-9]+\">.*?)(<div class=\"bloc-return-topic[^\"]*\">|<div class=\"container__pagination\">|<div class=\"container__post\">)", Pattern.DOTALL);
     private static final Pattern topicLinkInPermalinkPattern = Pattern.compile("(<div class=\"bloc-return-topic[^\"]*\">)[^<]*<a href=\"([^\"]*)");
-    private static final Pattern signaturePattern = Pattern.compile("<div class=\"signature-msg[^\"]*\">(.*)", Pattern.DOTALL);
+    private static final Pattern signaturePattern = Pattern.compile("<div class=\"messageUser__signature[^\"]*\"[^>]*><p [^>]*>(.*?)</p>", Pattern.DOTALL);
     private static final Pattern avatarPattern = Pattern.compile("<img\\s+src=\"(https?:)?//([^\"]*)\"\\s+class=\"avatar__image\"", Pattern.DOTALL);
     private static final Pattern entireTopicPattern = Pattern.compile("<li (id=\"topic-[^\"]*\" )?class=\"tablesForum[^\"]*\">[^<]*<a class=\"tablesForum__cellSubject\" href=\"[^\"]*\"[^>]*>.*?<span class=\"tablesForum__subjectText\">.*?</li>", Pattern.DOTALL);
     private static final Pattern pseudoIsBlacklistedPattern = Pattern.compile("<div class=\"messageUser[^\"]*msg-pseudo-blacklist[^\"]*\" id=\"message-");
@@ -46,7 +46,7 @@ public final class JVCParser {
     private static final Pattern userCanKickOrDekickAuthorPattern = Pattern.compile("<span class=\"picto-msg-(kick|dekick)\" title=\"(Kicker|Dékicker)\" data-id-alias=\"[^\"]*\">");
     private static final Pattern pseudoInfosPattern = Pattern.compile("<span class=\"JvCare [^\"]*?messageUser__label\\s*\"[^>]*>\\s*([a-zA-Z0-9_\\[\\]-]+)\\s*</span>");
     private static final Pattern idAliasPattern = Pattern.compile("data-id-alias=\"([0-9]+)\">");
-    private static final Pattern messagePattern = Pattern.compile("<div class=\"messageUser__msg js-message-user-msg\">\\s*(.*?)\\s*</div>\\s*(?=<div class=\"messageUser__dateEdit\"|<div class=\"messageUser__separator\"|<div class=\"messageUser__signature\"|<div class=\"messageUser__footer\"|</div>)", Pattern.DOTALL);
+    private static final Pattern messagePattern = Pattern.compile("<div class=\"messageUser__msg js-message-user-msg\">\\s*(.*?)\\s*</div>.*?<div class=\"messageUser__footer[^\"]*\"[^>]*>", Pattern.DOTALL);
     private static final Pattern currentPagePattern = Pattern.compile("<span [^>]*class=\"(?:[^\"]*\\b)?(?:page-active|pagination__item pagination__item--current|pagination__button--isCurrent)(?:\\b[^\"]*)?\"[^>]*>\\s*([0-9]+)\\s*</span>");
     private static final Pattern pageLinkPattern = Pattern.compile("<(?:span[^>]*>\\s*<a href=\"([^\"]*)\" class=\"lien-jv\">([0-9]+)</a>\\s*</span>|a [^>]*class=\"[^\"]*\\b(?:pagination__item|pagination__button)\\b[^\"]*\"[^>]*href=\"([^\"]*)\"[^>]*>\\s*([0-9]+)\\s*</a>|a [^>]*href=\"([^\"]*)\"[^>]*class=\"[^\"]*\\b(?:pagination__item|pagination__button)\\b[^\"]*\"[^>]*>\\s*([0-9]+)\\s*</a>)");
     private static final Pattern topicFormPattern = Pattern.compile("(<form role=\"form\" class=\"form-post-topic[^\"]*\" method=\"post\" action=\"[^\"]*\".*?>.*?</form>)", Pattern.DOTALL);
@@ -64,9 +64,9 @@ public final class JVCParser {
     private static final Pattern subIdInJsonPattern = Pattern.compile("\"id-abonnement\":([0-9]*)");
     private static final Pattern codeBlockPattern = Pattern.compile("<pre class=\"pre-jv\"><code class=\"code-jv\">([^<]*)</code></pre>");
     private static final Pattern codeLinePattern = Pattern.compile("<code class=\"code-jv\">(.*?)</code>", Pattern.DOTALL);
-    private static final Pattern spoilLinePattern = Pattern.compile("<span class=\"bloc-spoil-jv en-ligne\">.*?<span class=\"contenu-spoil\">(.*?)</span></span>", Pattern.DOTALL);
-    private static final Pattern spoilBlockPattern = Pattern.compile("<div class=\"bloc-spoil-jv\">.*?<div class=\"contenu-spoil\">(.*?)</div></div>", Pattern.DOTALL);
-    private static final Pattern spoilOverlyPattern = Pattern.compile("(<(span|div) class=\"bloc-spoil-jv[^\"]*\">.*?<(span|div) class=\"contenu-spoil\">|</span></span>|</div></div>)", Pattern.DOTALL);
+    private static final Pattern spoilLinePattern = Pattern.compile("<span class=\"message__spoil[^\"]*\">.*?<span class=\"message__spoilContent\">(.*?)</span>.*?</span>", Pattern.DOTALL);
+    private static final Pattern spoilBlockPattern = Pattern.compile("<div class=\"message__spoil[^\"]*\">.*?<div class=\"message__spoilContent\">(.*?)</div>.*?</div>", Pattern.DOTALL);
+    private static final Pattern spoilOverlyPattern = Pattern.compile("(<(span|div) class=\"message__spoil[^\"]*\">.*?<(span|div) class=\"message__spoilContent\">|</span>.*?</span>|</div>.*?</div>)", Pattern.DOTALL);
     private static final Pattern pageTopicLinkNumberPattern = Pattern.compile("^(https?://www\\.jeuxvideo\\.com/forums/(?:1|42)-([0-9]*)-([0-9]*)-)([0-9]*)(-[0-9]*-[0-9]*-[0-9]*-[^./]*\\.htm)[#?]?");
     private static final Pattern pageForumLinkNumberPattern = Pattern.compile("^(https?://www\\.jeuxvideo\\.com/forums/0-([0-9]*)-[0-9]*-[0-9]*-[0-9]*-)([0-9]*)(-[0-9]*-([^./]*)\\.htm)[#?]?");
     private static final Pattern pageSearchTopicLinkNumberPattern = Pattern.compile("^(https?://www\\.jeuxvideo\\.com/recherche/forums/(0-[0-9]*-[0-9]*-[0-9]*-[0-9]*-))([0-9]*)(-[0-9]*-[^./]*\\.htm)([#?]?.*)");
@@ -1929,7 +1929,10 @@ public final class JVCParser {
                 /* JVC 2026 : Gestion de la recherche par message. */
                 JSONArray listMessages = topicJson.optJSONArray("messagesList");
                 if(listMessages != null) {
-                    for (int j = 0; j < listMessages.length(); j++) {
+                    // Les messages sont triés dans l'ordre chronologique.
+                    // Il faut les traiter à l'envers pour les avoir dans
+                    // le bon ordre (du plus récen au plus ancien).
+                    for (int j = listMessages.length() - 1; j >= 0; j--) {
                         JSONObject messageJson = listMessages.optJSONObject(j);
                         if(messageJson == null) continue;
 
